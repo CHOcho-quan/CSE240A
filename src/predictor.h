@@ -39,10 +39,16 @@ extern const char *bpName[];
 #define ST  3			// predict T, strong taken
 
 // Definitions for Choose Predictor
-#define SGLOBAL 0
-#define WGLOBAL 1
-#define WLOCAL 2
-#define SLOCAL 3
+#define SGLOBAL 0       // select GLOBAL, strong
+#define WGLOBAL 1       // select GLOBAL, weak
+#define WLOCAL 2        // select LOCAL, strong
+#define SLOCAL 3        // select LOCAL, weak
+
+// Definitions for Perceptron
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MIN_WEIGHT -10
+#define MAX_WEIGHT 10
 
 //------------------------------------//
 //      Predictor Configuration       //

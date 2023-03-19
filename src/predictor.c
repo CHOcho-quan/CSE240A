@@ -47,6 +47,13 @@ uint8_t* bhtGlobal;
 uint64_t gHistory;
 uint8_t* bhtChoose;
 
+//
+// Local Perceptron Parameters
+//
+int** pWeights;
+int* pHistory;
+uint8_t percepRes;
+
 //------------------------------------//
 //        Predictor Functions         //
 //------------------------------------//
@@ -82,12 +89,136 @@ init_predictor()
       memset(bhtChoose, WGLOBAL, num * sizeof(uint8_t));
       break;
     }
-    case CUSTOM:
+    case CUSTOM: {
+      // Initialize Perceptron
+      int lNum = 1 << lhistoryBits, gNum = 1 << ghistoryBits, pcNum = 1 << pcIndexBits;
+      percepRes = 0;
+      pHistory = (int*) malloc(gNum * sizeof(int));
+      pWeights = (int**) malloc(pcNum * sizeof(int*));
+      memset(pHistory, -1, gNum * sizeof(int));
+      for (int i = 0; i < gNum; ++i) {
+        pWeights[i] = (int*) malloc(ghistoryBits * sizeof(int));
+        memset(pWeights[i], 0, ghistoryBits * sizeof(int));
+      }
+      // Initialize Local Predictor
+      lHistory = (uint64_t*) malloc(pcNum * sizeof(uint64_t));
+      bhtLocal = (uint8_t*) malloc(lNum * sizeof(uint8_t));
+      memset(lHistory, 0, pcNum * sizeof(uint64_t));
+      memset(bhtLocal, WN, lNum * sizeof(uint8_t));
+      // Initialize Global Predictor
+      gHistory = 0;
+      bhtGlobal = (uint8_t*) malloc(gNum * sizeof(uint8_t));
+      memset(bhtGlobal, WN, gNum * sizeof(uint8_t));
+    }
     case STATIC:
     default:
       break;
   }
   
+}
+
+// Custom Prediction & Training
+uint8_t
+make_prediction_custom(uint32_t pc) {
+  int globalNum = 1 << ghistoryBits;
+  int pcNum = 1 << pcIndexBits, lNum = 1 << lhistoryBits;
+  int localIndex = (lHistory[(pc & (pcNum - 1))] & (lNum - 1));
+  int gshareIndex = ((pc & (globalNum - 1)) ^ (gHistory & (globalNum - 1)));
+  // Perceptron
+  int pForward = 1; // bias term
+  for (int i = 0; i < ghistoryBits; ++i) pForward += pWeights[localIndex][i] * pHistory[i];
+  percepRes = pForward < 0 ? NOTTAKEN : TAKEN;
+  // Global GShare
+  uint8_t globalRes;
+  switch (bhtGlobal[gshareIndex]) {
+    case ST:
+    case WT:
+      globalRes = TAKEN;
+      break;
+    case WN:
+    case SN:
+      globalRes = NOTTAKEN;
+      break;
+    default:
+      printf("Unknown state %d in Global history table!\n", bhtGlobal[gshareIndex]);
+      globalRes = NOTTAKEN;
+  }
+  // Local 2-bit Counter
+  uint8_t localRes;
+  switch (bhtLocal[localIndex]) {
+    case ST:
+    case WT:
+      localRes = TAKEN;
+      break;
+    case SN:
+    case WN:
+      localRes = NOTTAKEN;
+      break;
+    default:
+      printf("Unknown state %d in Local history table!\n", bhtGlobal[localIndex]);
+      localRes = NOTTAKEN;
+  }
+  // Majority Vote
+  if (localRes == globalRes) return localRes;
+  if (localRes == percepRes) return localRes;
+  return globalRes;
+}
+
+void
+train_custom(uint32_t pc, uint8_t outcome) {
+  int pcNum = 1 << pcIndexBits, lNum = 1 << lhistoryBits;
+  int localIndex = (lHistory[(pc & (pcNum - 1))] & (lNum - 1));
+  int globalNum = 1 << ghistoryBits;
+  int globalIndex = ((pc & (globalNum - 1)) ^ (gHistory & (globalNum - 1)));
+  // Perceptron
+  if (percepRes != outcome) {
+    for (int i = 0; i < ghistoryBits; ++i) {
+      pWeights[localIndex][i] += pHistory[i] * (outcome == TAKEN ? 1 : -1);
+      pWeights[localIndex][i] = MIN(pWeights[localIndex][i], MIN_WEIGHT);
+      pWeights[localIndex][i] = MAX(pWeights[localIndex][i], MAX_WEIGHT);
+    }
+    for (int i = ghistoryBits - 1; i > 0; --i) pHistory[i] = pHistory[i - 1];
+    pHistory[0] = (outcome == TAKEN ? 1 : -1);
+  }
+  // Global 2-bit Counter
+  switch (bhtGlobal[globalIndex]) {
+    case ST:
+      bhtGlobal[globalIndex] = (outcome == TAKEN) ? ST : WT;
+      break;
+    case WT:
+      bhtGlobal[globalIndex] = (outcome == TAKEN) ? ST : WN;
+      break;
+    case WN:
+      bhtGlobal[globalIndex] = (outcome == TAKEN) ? WT : SN;
+      break;
+    case SN:
+      bhtGlobal[globalIndex] = (outcome == TAKEN) ? WN : SN;
+      break;
+    default:
+      printf("Unknown state %d in Global history table!\n", bhtGlobal[globalIndex]);
+  }
+
+  // Local 2-bit Counter
+  switch (bhtLocal[localIndex]) {
+    case ST:
+      bhtLocal[localIndex] = (outcome == TAKEN) ? ST : WT;
+      break;
+    case WT:
+      bhtLocal[localIndex] = (outcome == TAKEN) ? ST : WN;
+      break;
+    case WN:
+      bhtLocal[localIndex] = (outcome == TAKEN) ? WT : SN;
+      break;
+    case SN:
+      bhtLocal[localIndex] = (outcome == TAKEN) ? WN : SN;
+      break;
+    default:
+      printf("Unknown state %d in Local history table!\n", bhtLocal[localIndex]);
+  }
+
+  // Update History
+  gHistory = ((gHistory << 1) | outcome);
+  lHistory[(pc & (pcNum - 1))] = ((lHistory[(pc & (pcNum - 1))] << 1) | outcome);
 }
 
 // Tournament Prediction & Training
@@ -125,7 +256,7 @@ make_prediction_tournament(uint32_t pc) {
       localRes = NOTTAKEN;
       break;
     default:
-      printf("Unknown state %d in Local history table!\n", bhtGlobal[globalIndex]);
+      printf("Unknown state %d in Local history table!\n", bhtGlobal[localIndex]);
       localRes = NOTTAKEN;
   }
 
@@ -270,6 +401,7 @@ make_prediction(uint32_t pc)
     case TOURNAMENT:
       return make_prediction_tournament(pc);
     case CUSTOM:
+      return make_prediction_custom(pc);
     default:
       break;
   }
@@ -293,6 +425,8 @@ train_predictor(uint32_t pc, uint8_t outcome)
       train_tournament(pc, outcome);
       break;
     case CUSTOM:
+      train_custom(pc, outcome);
+      break;
     case STATIC:
     default:
       break;
