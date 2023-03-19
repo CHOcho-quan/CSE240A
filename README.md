@@ -14,9 +14,7 @@
 
 ## Introduction
 
-As we’ve discussed in class, branch prediction is critical to performance in modern processors.  An accurate branch predictor ensures that the front-end of the machine is capable of feeding the back-end with correct-path instructions. Beyond its criticality in processor execution, branch prediction is an interesting problem.  How do you make accurate predictions on little data using small, fast hardware structures.
-
-For this Project you will be implementing various branch predictors in a simulated environment.  We have provided a starting framework to help you design your predictors.  The framework (main.c) will perform all of the command-line switches as well as the reading in of the trace files.  You will implement your predictors by completing all of the TODOs in the predictor.c file.  Note that this is the only file in which you are able to make changes, as it will be the only file of yours we use for grading.
+2023 WI UCSD CSE240A final projects. Implemented 2 typical branch predictor along with one designed custom predictor.
 
 ## Traces
 
