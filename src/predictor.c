@@ -93,10 +93,10 @@ init_predictor()
       // Initialize Perceptron
       int lNum = 1 << lhistoryBits, gNum = 1 << ghistoryBits, pcNum = 1 << pcIndexBits;
       percepRes = 0;
-      pHistory = (int*) malloc(gNum * sizeof(int));
+      pHistory = (int*) malloc(ghistoryBits * sizeof(int));
       pWeights = (int**) malloc(pcNum * sizeof(int*));
-      memset(pHistory, -1, gNum * sizeof(int));
-      for (int i = 0; i < gNum; ++i) {
+      memset(pHistory, -1, ghistoryBits * sizeof(int));
+      for (int i = 0; i < pcNum; ++i) {
         pWeights[i] = (int*) malloc(ghistoryBits * sizeof(int));
         memset(pWeights[i], 0, ghistoryBits * sizeof(int));
       }
